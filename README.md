@@ -457,12 +457,17 @@ a[$1$2]>0 : the else block will only be executed if this is the second file so w
 see https://github.com/crazyhottommy/scripts-general-use/blob/master/Shell/Awk_anotates_vcf_with_bed.ipynb
 
 
-* Day 24  find bam in current folder (search recursively) and copy it to a new directory using 5 CPUs
+* Day 24  find bam in the current folder (search recursively) and copy it to a new directory using 5 CPUs
 
 ```
 find . -name "*bam" | xargs -P5 -I{} rsync -av {} dest_dir
 ```
 
+or 
+
+```
+find . -name "*bam" | parallel -j 5 'rsync -avhP {} dest_dir'
+```
 * Day 25
 
 `ls -X ` will group files by extension.
@@ -539,8 +544,399 @@ cat test.txt| awk 'ORS=NR%2?"\t":"\n"'
 3    GGTTAATATGGTGAAATTTAAT     3    ACCTCAACCTCNTAAATAACTAA
 ```
 
-ORS: output record seperator in awk. `var=condition?condition_if_true:condition_if_false` is the ternary operator.
+ORS: output record separator in awk. `var=condition?condition_if_true:condition_if_false` is the ternary operator.
 
+* Day 28 grep fastq reads containing a pattern but maintain the fastq format
+
+```
+
+grep -A 2 -B 1 TGG example.fastq | sed '/^--$/d'
+
+# or
+zcat reads.fq.gz \
+| paste - - - - \
+| awk -v FS="\t" -v OFS="\n" '$2 ~ "TGG" {print $1, $2, $3, $4}' \
+| gzip > filtered.fq.gz
+
+```
+
+* Day 29  count how many columns of a tsv files
+
+```
+cat file.tsv | head -1 | tr "\t" "\n" | wc -l  
+csvcut -n -t  file.tsv (from csvkit)
+awk '{print NF; exit}' file.tsv
+awk -F "\t" 'NR == 1 {print NF}' file.tsv
+```
+
+
+* Day 30  combine info to the fasta header
+
+```
+cat myfasta.txt 
+>Blap_contig79
+MSTDVDAKTRSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+>Bluc_contig23663
+MSTNVDAKARSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+>Blap_contig7988
+MSTDVDAKTRSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+>Bluc_contig1223663
+MSTNVDAKARSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+
+cat my_info.txt 
+info1
+info2
+info3
+info4
+
+paste <(cat my_info.txt) <(cat myfasta.txt| paste - - | cut -c2-) | awk '{printf(">%s_%s\n%s\n",$1,$2,$3);}'
+>info1_Blap_contig79
+MSTDVDAKTRSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+>info2_Bluc_contig23663
+MSTNVDAKARSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+>info3_Blap_contig7988
+MSTDVDAKTRSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+>info4_Bluc_contig1223663
+MSTNVDAKARSKERASIAAFYVGRNIFVTGGTGFLGKVLIEKLLRSCPDVGEIFILMRPKAGLSI
+```
+
+* Day 31 change fasta header
+
+The fasta header is like >7 dna:chromosome chromosome:GRCh37:7:1:159138663:1 convert to >7:
+
+```
+cat Homo_sapiens_assembly19.fasta | gawk '/^>/ { b=gensub(" dna:.+", "", "g", $0); print b; next} {print}' > Homo_sapiens_assembly19_reheader.fasta
+```
+
+* Day 32 make dir and cd into that dir
+
+```
+mkdir blah && cd $_
+
+cd  # go to your home folder
+
+cd - # go back to your previous folder
+```
+
+
+* Day 33
+
+Finally learned about the !$ in unix: take the last thing (word) from the previous command.
+
+```
+echo hello, world
+
+echo !$ 
+world
+
+```
+
+Create a script of the last executed command:
+
+```
+echo "!!" > foo.sh
+```
+
+Reuse all parameter of the previous command line:
+
+```
+!*
+```
+
+* Day 34 merge all bed files and add a column for the filename.
+
+```
+awk '{print $0 "\t" FILENAME}' *bed 
+```
+
+* Day 35  add or remove chr from the start of each line
+
+```
+# add chr
+sed 's/^/chr/' my.bed
+
+# or
+awk 'BEGIN {OFS = "\t"} {$1="chr"$1; print}'
+
+# remove chr
+sed 's/^chr//' my.bed
+
+```
+
+* Day 36 check if a tsv files have the same number of columns for all rows
+
+```
+awk '{print NF}' test.tsv | sort -nu | head -n 1
+```
+
+
+* Day 37 Parallelized samtools mpileup
+
+```
+BAM="yourFile.bam"
+REF="reference.fasta"
+samtools view -H $BAM | grep "\@SQ" | sed 's/^.*SN://g' | cut -f 1  \
+| xargs -I {} -n 1 -P 24 sh -c "samtools mpileup -BQ0 -d 100000 -uf $REF -r \"{}\" $BAM \
+| bcftools call -cv > \"{}\".vcf"
+```
+
+* Day 38 convert multiple lines to a single line
+
+This is better than tr "\n" "\t" because somtimes I do not want to convert the last newline to tab.
+
+```
+cat myfile.txt | paste -s 
+```
+
+
+* Day 39 merge multiple files with the same header by keeping the header of the first file
+
+I usually do it in `R`, but like the quick solution.
+
+```
+awk 'FNR==1 && NR!=1{next;}{print}' *.csv 
+
+# or
+
+awk '
+    FNR==1 && NR!=1 { while (/^<header>/) getline; }
+    1 {print}
+' file*.txt >all.txt
+```
+
+* Day 40  insert a field into the first line
+
+```
+cut -f1-4 F5.hg38.enhancers.expression.usage.matrix | head
+CNhs11844   CNhs11251   CNhs11282   CNhs10746
+chr10:100006233-100006603   1   0   0
+chr10:100008181-100008444   0   0   0
+chr10:100014348-100014634   0   0   0
+chr10:100020065-100020562   0   0   0
+chr10:100043485-100043744   0   0   0
+chr10:100114218-100114567   0   0   0
+chr10:100148595-100148922   0   0   0
+chr10:100182422-100182522   0   0   0
+chr10:100184498-100184704   0   0   0
+
+sed '1 s/^/enhancer\t/' F5.hg38.enhancers.expression.usage.matrix | cut -f1-4 | head
+enhancer    CNhs11844   CNhs11251   CNhs11282
+chr10:100006233-100006603   1   0   0
+chr10:100008181-100008444   0   0   0
+chr10:100014348-100014634   0   0   0
+chr10:100020065-100020562   0   0   0
+chr10:100043485-100043744   0   0   0
+chr10:100114218-100114567   0   0   0
+chr10:100148595-100148922   0   0   0
+chr10:100182422-100182522   0   0   0
+chr10:100184498-100184704   0   0   0
+```
+
+
+* Day 41 extract PASS calls from vcf file
+
+```
+cat my.vcf | awk -F '\t' '{if($0 ~ /\#/) print; else if($7 == "PASS") print}' > my_PASS.vcf
+
+```
+
+
+* Day 42 replace a pattern in a specific column
+
+```
+## column5 
+awk '{gsub(pattern,replace,$5)}1' in.file
+
+## http://bioinf.shenwei.me/csvtk/usage/#replace
+csvtk replace -f 5 -p pattern -r replacement 
+```
+
+* Day 43 move a process to a screen session
+
+```
+1. Suspend: Ctrl+z
+2. Resume: bg
+3. Disown: disown %1
+4. Launch screen
+5. Find pid: prep BLAH
+6. Reparent process: reptyr ###
+
+```
+
+* Day 44 count uinque values in a column and put in a new column
+
+```
+# input
+blabla_1 A,B,C,C
+blabla_2 A,E,G
+blabla_3 R,Q,A,B,C,R,Q
+
+# output
+blabla_1 3
+blabla_2 3
+blabla_3 5
+
+
+awk '{split(x,C); n=split($2,F,/,/); for(i in F) if(C[F[i]]++) n--; print $1, n}' file
+
+```
+
+
+* Day 45 Create TSS bed from GTF in one line:
+
+```
+zcat gencode.v29lift37.annotation.gtf.gz | awk '$3=="gene" {print $0}' | grep protein_coding | awk -v OFS="\t" '{if ($7=="+") {print $1, $4, $4+1} else {print $1, $5-1, $5}}' > tss.bed
+```
+
+or 5kb flanking tss
+
+```
+zcat gencode.v29lift37.annotation.gtf.gz | awk '$3=="gene" {print $0}' | grep protein_coding | awk -v OFS="\t" '{if ($7=="+") {print $1, $4, $4+5000} else {print $1, $5-5000, $5}}' > promoters.bed
+```
+caveat: some genes are at the end of the chromosomes, add or minus 5000 may go beyond the point, use bedtools slop with a genome size file to avoid that.
+
+download fetchChromSizes from http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/
+
+
+```
+fetchChromSizes hg19 > chrom_size.txt
+
+zcat gencode.v29lift37.annotation.gtf.gz | awk '$3=="gene" {print $0}' |  awk -v OFS="\t" '{if ($7=="+") {print $1, $4, $4+1} else {print $1, $5-1, $5}}' | bedtools slop -i - -g chrom_size.txt -b 5000 > promoter_5kb.bed
+```
+
+* Day 46 reverse one column of a txt file
+
+reverse column 3 and put it to column5
+
+```
+
+awk -v OFS="\t" '{"echo "$3 "| rev" | getline $5}{print $0}' 
+
+#or use perl reverse second column
+perl -lane 'BEGIN{$,="\t"}{$rev=reverse $F[2];print $F[0],$F[1],$rev,$F[3]}
+```
+
+
+* Day 47 Get the full path of a file
+
+```
+realpath file.txt
+readlink -f file.txt 
+```
+
+
+* Day 48 unizp in parallel using pugz
+
+
+https://github.com/Piezoid/pugz
+
+Contrary to the pigz program which does single-threaded decompression (see https://github.com/madler/pigz/blob/master/pigz.c#L232), pugz found a way to do truly parallel decompression.
+
+```
+parallel gzip ::: *.fastq
+pigz *.fastq
+pugz *.fastq
+```
+
+* Day 49 Generate a sequence from 0 to 100 in steps of 10
+
+```
+
+for i in `seq 0 10 100`; do echo $i; done
+
+
+* Day 50 kill all ssh sessions
+
+```
+pgrep ssh | xargs kill -9
+```
+
+* Day 51 Convert BAM file back to fastq
+
+```
+samtools view input.bam | \
+   awk 'BEGIN {FS="\t"} {print "@" $1 "\n" $10 "\n+\n" $11}' > output.bam.fastq
+```
+You can also do this with bamtools and picard.
+
+
+* Day 52 Untangle shuffled FASTQ file
+
+If a FASTQ file has paired-end reads intermingled, and you want to separate them into separate /1 and /2 files. This script assumes the /1 reads precede the /2 reads.
+
+```
+seqtk seq -l0 Shuffled.fq | gawk '{if ((NR-1) % 8 < 4) print >> "Separate_1.fq"; else print >> "Separate_2.fq"}'
+```
+
+
+* Day 53 Histogram of allele frequencies in VCF files
+
+```
+cat *.vcf | awk 'BEGIN {FS=";"} {for (i=1;i<=NF;i++) {if (index($i,"AF1")!=0) {print $i} }}' | \
+awk 'BEGIN {FS="="} {print int($2*10)/10}' | sort | uniq -c | sort -n -r | head
+```
+
+* Day 54 Count all the variants in at least two vcf files
+
+```
+cat *.vcf | grep -v '^#' | awk '{print $1 "\t" $2 "\t" $5}' | sort | uniq -d | wc -l
+```
+
+
+* Day 55  Sum and Mean of column 1
+
+```
+awk '{sum+=$1} END {print sum}'
+awk '{x+=$1}END{print x/NR}'
+```
+
+* Day 56 Trim leading and trailing whitespaces 
+
+Trim leading whitespace in file.txt:
+
+```
+sed ‘s/^[ \t]*//’ file.txt
+```
+
+Trim trailing whitespace in file.txt:
+
+```
+sed ‘s/[ \t]*$//’ file.txt
+```
+
+Trim leading and trailing whitespace in file.txt:
+
+```
+sed ‘s/^[ \t]//;s/[ \t]$//’ file.txt
+```
+
+* Day 57 count all sequences in a fasta file:
+
+```
+grep "^>" my.fasta -c
+```
+
+Note, do not omite the quote on `>`
+
+
+* Day 58 To keep only one copy of duplicated lines:
+
+```
+awk '!seen[$0]++'
+
+```
+
+* Day 59 To replace/squeeze multiple adjacent spaces by only one space:
+
+```
+tr -s " " my.file
+
+```
+
+
+## Bonus
+
+https://github.com/stephenturner/oneliners from Stephen Turner
 
 
 
