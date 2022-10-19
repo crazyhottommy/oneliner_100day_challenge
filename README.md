@@ -825,7 +825,7 @@ readlink -f file.txt
 ```
 
 
-* Day 48 unizp in parallel using pugz
+* Day 48 unizp in parallel 
 
 
 https://github.com/Piezoid/pugz
@@ -843,7 +843,7 @@ pugz *.fastq
 ```
 
 for i in `seq 0 10 100`; do echo $i; done
-
+```
 
 * Day 50 kill all ssh sessions
 
@@ -856,6 +856,9 @@ pgrep ssh | xargs kill -9
 ```
 samtools view input.bam | \
    awk 'BEGIN {FS="\t"} {print "@" $1 "\n" $10 "\n+\n" $11}' > output.bam.fastq
+
+#newer samtools
+samtools fastq input.bam > output.bam.fastq   
 ```
 You can also do this with bamtools and picard.
 
@@ -931,6 +934,13 @@ awk '!seen[$0]++'
 ```
 tr -s " " my.file
 
+```
+
+
+* Day 60 Print all possible 3mer DNA sequence combinations:
+
+```
+echo {A,C,T,G}{A,C,T,G}{A,C,T,G}
 ```
 
 
